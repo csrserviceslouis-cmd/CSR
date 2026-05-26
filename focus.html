@@ -1,0 +1,1762 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0d12">
+  <title>Focus Stack</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="sync.js" defer></script>
+  <script src="topbar.js" defer></script>
+  <style>
+    :root {
+      --bg: #0d0d12;
+      --surface: #161620;
+      --surface2: #1e1e2a;
+      --border: #252535;
+      --border2: #2e2e42;
+      --text: #dde0f0;
+      --muted: #6668a0;
+      --mph: #a855f7;
+      --mph-dim: rgba(168,85,247,0.12);
+      --caffeine: #f97316;
+      --caffeine-dim: rgba(249,115,22,0.12);
+      --theanine: #22c55e;
+      --theanine-dim: rgba(34,197,94,0.12);
+      --elevanse: #3b82f6;
+      --elevanse-dim: rgba(59,130,246,0.12);
+      --total: #94a3b8;
+      --red: #ef4444;
+      --yellow: #eab308;
+      --green: #22c55e;
+      --orange: #f97316;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 14px; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      padding-bottom: 24px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    header {
+      padding: 18px 20px 0;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+    }
+    .app-brand { display: flex; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+    .app-title { font-size: 1.05rem; font-weight: 700; letter-spacing: .03em; }
+    .app-badge {
+      font-size: .65rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .1em; color: var(--muted); border: 1px solid var(--border2);
+      padding: 2px 6px; border-radius: 4px;
+    }
+    .app-sub { font-size: .72rem; color: var(--muted); margin-bottom: 14px; }
+    .tabs { display: flex; gap: 2px; }
+    .tab-btn {
+      flex: 1; padding: 10px 6px; background: none; border: none;
+      border-bottom: 2px solid transparent; color: var(--muted);
+      font-size: .78rem; font-weight: 600; cursor: pointer;
+      text-transform: uppercase; letter-spacing: .09em; transition: color .2s, border-color .2s;
+    }
+    .tab-btn.active { color: var(--text); border-bottom-color: var(--mph); }
+
+    .tab-content { display: none; padding: 18px 20px; }
+    .tab-content.active { display: block; }
+    .section-label {
+      font-size: .68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .12em; color: var(--muted); margin: 18px 0 10px;
+    }
+
+    /* SUBSTANCE CARDS */
+    .substance-cards {
+      display: grid; grid-template-columns: repeat(3,1fr); gap: 10px;
+    }
+    @media(max-width:560px) { .substance-cards { grid-template-columns: 1fr; } }
+    .substance-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 12px 10px;
+      transition: transform .15s ease;
+    }
+    .substance-card.mph      { border-top: 2px solid var(--mph); }
+    .substance-card.caffeine { border-top: 2px solid var(--caffeine); }
+    .substance-card.theanine { border-top: 2px solid var(--theanine); }
+    .substance-card.elevanse { border-top: 2px solid var(--elevanse); }
+    .sub-label {
+      font-size: .7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .1em; margin-bottom: 8px;
+    }
+    .substance-card.mph      .sub-label { color: var(--mph); }
+    .substance-card.caffeine .sub-label { color: var(--caffeine); }
+    .substance-card.theanine .sub-label { color: var(--theanine); }
+    .substance-card.elevanse .sub-label { color: var(--elevanse); }
+
+    .dose-btns { display: flex; flex-wrap: wrap; gap: 5px; }
+    .dose-btn {
+      flex: 1; min-width: 44px; padding: 7px 8px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 7px; color: var(--text);
+      font-size: .75rem; font-weight: 500; cursor: pointer;
+      transition: background .15s, border-color .15s, color .15s, transform .1s;
+    }
+    .dose-btn:active { transform: scale(.95); }
+    .mph      .dose-btn:hover { background: var(--mph-dim);      border-color: var(--mph);      color: var(--mph); }
+    .caffeine .dose-btn:hover { background: var(--caffeine-dim); border-color: var(--caffeine); color: var(--caffeine); }
+    .theanine .dose-btn:hover { background: var(--theanine-dim); border-color: var(--theanine); color: var(--theanine); }
+    .elevanse .dose-btn:hover { background: var(--elevanse-dim); border-color: var(--elevanse); color: var(--elevanse); }
+
+    /* FOCUS METER */
+    .focus-meter {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 16px; margin-top: 14px;
+    }
+    .focus-num { font-size: 2rem; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 54px; }
+    .focus-meta { flex: 1; }
+    .focus-meta-label { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+    .focus-bar {
+      height: 5px; background: var(--border); border-radius: 3px;
+      overflow: hidden; margin-top: 5px;
+    }
+    .focus-bar-fill { height: 100%; border-radius: 3px; transition: width .6s ease, background .4s; }
+    .eff-target-badge {
+      font-size: .68rem; font-weight: 700; padding: 3px 8px;
+      border-radius: 20px; white-space: nowrap;
+    }
+
+    /* BREAK BANNER */
+    .break-banner {
+      display: none; align-items: center; gap: 9px;
+      background: rgba(234,179,8,.08); border: 1px solid rgba(234,179,8,.35);
+      border-radius: 8px; padding: 9px 13px; margin-top: 10px;
+      font-size: .8rem; color: var(--yellow);
+    }
+    .break-banner.active { display: flex; }
+    .break-banner-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); flex-shrink: 0; }
+
+    /* CRASH STRIP */
+    .crash-strip {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 12px; margin-top: 8px;
+      font-size: .8rem; color: var(--muted); transition: background .3s, border-color .3s, color .3s;
+    }
+    .crash-strip.active {
+      background: rgba(239,68,68,.08);
+      border-color: rgba(239,68,68,.35);
+      color: var(--red);
+    }
+    .crash-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--border2); flex-shrink: 0; transition: background .3s;
+    }
+    .crash-strip.active .crash-dot { background: var(--red); }
+
+    /* CHART */
+    .chart-wrap {
+      position: relative; height: 260px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px 10px 10px;
+      margin-top: 10px;
+    }
+
+    /* DOSE LOG */
+    .dose-log { display: flex; flex-direction: column; gap: 5px; max-height: 220px; overflow-y: auto; }
+    .dose-empty { text-align: center; color: var(--muted); font-size: .82rem; padding: 14px; }
+    .dose-item {
+      display: flex; align-items: center; gap: 9px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 7px 11px;
+    }
+    .dose-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .dose-time { font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 38px; }
+    .dose-name { font-size: .83rem; font-weight: 500; flex: 1; }
+    .dose-mg { font-size: .78rem; color: var(--muted); min-width: 50px; text-align: right; }
+    .dose-rm {
+      background: none; border: none; color: var(--muted); cursor: pointer;
+      font-size: 1rem; padding: 0 2px; line-height: 1; transition: color .2s;
+    }
+    .dose-rm:hover { color: var(--red); }
+
+    /* SLIDERS */
+    .slider-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px 16px; margin-bottom: 10px;
+    }
+    .slider-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .slider-row-label { font-size: .82rem; color: var(--muted); }
+    .slider-row-val { font-size: 1.1rem; font-weight: 700; }
+    input[type="range"] {
+      width: 100%; height: 4px; border-radius: 2px;
+      background: var(--border2); outline: none; -webkit-appearance: none; cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 17px; height: 17px;
+      border-radius: 50%; background: var(--mph); cursor: pointer;
+      box-shadow: 0 0 0 3px rgba(168,85,247,.2);
+    }
+    .slider-ends {
+      display: flex; justify-content: space-between;
+      font-size: .68rem; color: var(--muted); margin-top: 5px;
+    }
+
+    /* SLEEP QUALITY */
+    .sq-box {
+      display: flex; align-items: center; gap: 12px;
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px 14px; margin-bottom: 14px; transition: background .3s, border-color .3s;
+    }
+    .sq-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+    .sq-label { font-size: .88rem; font-weight: 600; }
+    .sq-sub   { font-size: .74rem; color: var(--muted); margin-top: 2px; }
+
+    /* RECOMMENDATIONS */
+    .rec-list { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+    .rec-item {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 10px 14px; border-bottom: 1px solid var(--border);
+      font-size: .81rem; line-height: 1.45;
+    }
+    .rec-item:last-child { border-bottom: none; }
+    .rec-ico { flex-shrink: 0; margin-top: 1px; }
+
+    /* ADVICE TAB */
+    .warn-box {
+      background: rgba(239,68,68,.07); border: 1px solid rgba(239,68,68,.28);
+      border-radius: 10px; padding: 11px 14px; margin-bottom: 8px;
+    }
+    .warn-title { font-size: .72rem; font-weight: 700; color: var(--red); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 5px; }
+    .warn-text { font-size: .8rem; line-height: 1.5; }
+    .ok-box {
+      background: rgba(34,197,94,.07); border: 1px solid rgba(34,197,94,.28);
+      border-radius: 10px; padding: 11px 14px; margin-bottom: 8px;
+      font-size: .8rem; line-height: 1.5;
+    }
+    .safe-box {
+      background: rgba(34,197,94,.07); border: 1px solid rgba(34,197,94,.28);
+      border-radius: 10px; padding: 12px 14px;
+    }
+    .safe-title { font-size: .72rem; font-weight: 700; color: var(--theanine); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 5px; }
+    .safe-text { font-size: .8rem; line-height: 1.5; }
+    .schedule-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 0; border-bottom: 1px solid var(--border);
+    }
+    .schedule-row:last-child { border-bottom: none; }
+    .sch-time { font-size: .85rem; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 46px; color: var(--muted); }
+    .sch-dot  { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .sch-desc { font-size: .8rem; flex: 1; line-height: 1.4; }
+
+    /* TIME PICKER */
+    .time-picker {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 9px 14px; margin-bottom: 10px;
+    }
+    .time-picker label { font-size: .75rem; color: var(--muted); white-space: nowrap; }
+    .time-picker input[type="time"] {
+      background: var(--surface2); border: 1px solid var(--border2);
+      border-radius: 7px; color: var(--text); font-size: .9rem;
+      font-weight: 600; padding: 5px 10px; cursor: pointer;
+      outline: none; font-family: inherit;
+    }
+    .time-picker input[type="time"]:focus { border-color: var(--mph); }
+    .time-now-btn {
+      margin-left: auto; background: var(--surface2); border: 1px solid var(--border2);
+      border-radius: 6px; color: var(--muted); font-size: .72rem;
+      padding: 4px 9px; cursor: pointer; white-space: nowrap; transition: color .2s, border-color .2s;
+    }
+    .time-now-btn:hover { color: var(--text); border-color: var(--mph); }
+
+    /* OPT RECOMMENDATIONS */
+    .opt-rec {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 9px; padding: 10px 13px; margin-bottom: 6px;
+      border-left: 2px solid transparent;
+    }
+    .opt-rec.theanine { border-left-color: var(--theanine); }
+    .opt-rec.caffeine { border-left-color: var(--caffeine); }
+    .opt-rec.mph      { border-left-color: var(--mph); }
+    .opt-time { font-size: .82rem; font-weight: 700; min-width: 36px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+    .opt-time.now-label { color: var(--text); }
+    .opt-dot  { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+    .opt-body { flex: 1; }
+    .opt-dose { font-size: .83rem; font-weight: 600; margin-bottom: 2px; }
+    .opt-why  { font-size: .73rem; color: var(--muted); line-height: 1.42; }
+    .opt-warn { font-size: .72rem; color: var(--yellow); margin-top: 4px; line-height: 1.4; }
+    .opt-empty { font-size: .82rem; color: var(--muted); text-align: center; padding: 12px 0; }
+
+    /* PLANNER TAB */
+    .eff-selector { display: flex; gap: 6px; margin-bottom: 12px; }
+    .eff-btn {
+      flex: 1; padding: 10px 4px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 8px;
+      color: var(--muted); font-size: .78rem; font-weight: 700;
+      cursor: pointer; text-align: center; transition: all .2s;
+    }
+    .eff-btn .eff-num { font-size: 1.1rem; display: block; margin-bottom: 2px; }
+    .eff-btn .eff-name { font-size: .62rem; text-transform: uppercase; letter-spacing: .06em; display: block; }
+    .eff-btn:hover { border-color: var(--mph); color: var(--text); }
+    .eff-btn.active { border-color: var(--mph); background: var(--mph-dim); color: var(--text); }
+    .eff-btn.lv4.active { border-color: var(--orange); background: rgba(249,115,22,.12); }
+    .eff-btn.lv5.active { border-color: var(--red); background: rgba(239,68,68,.12); }
+
+    .eff-desc {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+      font-size: .8rem; line-height: 1.55;
+    }
+    .eff-desc-title {
+      font-size: .72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .1em; margin-bottom: 6px;
+    }
+
+    .honest-box {
+      border-radius: 10px; padding: 12px 14px; margin-bottom: 8px;
+      border: 1px solid rgba(234,179,8,.3); background: rgba(234,179,8,.07);
+    }
+    .honest-box.red { border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.07); }
+    .honest-title {
+      font-size: .72rem; font-weight: 700; color: var(--yellow);
+      text-transform: uppercase; letter-spacing: .1em; margin-bottom: 6px;
+    }
+    .honest-box.red .honest-title { color: var(--red); }
+    .honest-text { font-size: .8rem; line-height: 1.55; }
+    .honest-sub-label {
+      font-size: .7rem; font-weight: 700; margin: 8px 0 3px;
+      text-transform: uppercase; letter-spacing: .08em;
+    }
+
+    .break-add-row {
+      display: flex; gap: 8px; margin-bottom: 10px; align-items: center;
+    }
+    .break-add-btn {
+      flex: 1; padding: 9px 10px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--muted); font-size: .8rem; font-weight: 600;
+      cursor: pointer; transition: color .2s, border-color .2s;
+    }
+    .break-add-btn:hover { color: var(--text); border-color: var(--mph); }
+
+    .break-form {
+      background: var(--surface); border: 1px solid var(--border2);
+      border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+    }
+    .break-form-row { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+    .break-form-row label { font-size: .75rem; color: var(--muted); white-space: nowrap; }
+    .break-form input[type="time"],
+    .break-form input[type="number"] {
+      background: var(--surface2); border: 1px solid var(--border2);
+      border-radius: 7px; color: var(--text); font-size: .88rem;
+      font-weight: 600; padding: 5px 10px; outline: none; font-family: inherit;
+    }
+    .break-form input[type="number"] { width: 70px; }
+    .break-form input:focus { border-color: var(--mph); }
+    .break-form-actions { display: flex; gap: 6px; }
+    .btn-primary {
+      padding: 7px 14px; background: var(--mph-dim); border: 1px solid var(--mph);
+      border-radius: 7px; color: var(--mph); font-size: .8rem; font-weight: 700;
+      cursor: pointer; transition: background .2s;
+    }
+    .btn-primary:hover { background: rgba(168,85,247,.22); }
+    .btn-ghost {
+      padding: 7px 14px; background: none; border: 1px solid var(--border);
+      border-radius: 7px; color: var(--muted); font-size: .8rem; font-weight: 600;
+      cursor: pointer; transition: color .2s;
+    }
+    .btn-ghost:hover { color: var(--text); }
+
+    .break-list { display: flex; flex-direction: column; gap: 6px; }
+    .break-item {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 12px;
+    }
+    .break-item-ico { font-size: 1rem; flex-shrink: 0; }
+    .break-item-time { font-size: .82rem; font-weight: 700; min-width: 80px; font-variant-numeric: tabular-nums; }
+    .break-item-type { font-size: .75rem; color: var(--muted); flex: 1; }
+    .break-item-rm {
+      background: none; border: none; color: var(--muted); cursor: pointer;
+      font-size: .9rem; padding: 0 3px; transition: color .2s;
+    }
+    .break-item-rm:hover { color: var(--red); }
+
+    /* TOAST */
+    #toast {
+      position: fixed; bottom: calc(80px + env(safe-area-inset-bottom)); left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      background: var(--surface2); border: 1px solid var(--border2);
+      padding: 9px 18px; border-radius: 20px; font-size: .82rem;
+      opacity: 0; transition: opacity .25s, transform .25s; pointer-events: none; z-index: 200;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="app-brand">
+    <div class="app-title">Focus Stack</div>
+    <div class="app-badge">Tracker</div>
+  </div>
+  <div class="app-sub">Real-time farmacologische plasma-curve</div>
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('stack')">Stack</button>
+    <button class="tab-btn"        onclick="switchTab('sleep')">Slaap</button>
+    <button class="tab-btn"        onclick="switchTab('advice')">Advies</button>
+    <button class="tab-btn"        onclick="switchTab('planner')">Planner</button>
+  </div>
+</header>
+
+<!-- ─────────────────── TAB 1: STACK ─────────────────── -->
+<div id="tab-stack" class="tab-content active">
+
+  <div class="time-picker">
+    <label>Tijdstip inname</label>
+    <input type="time" id="dose-time-input">
+    <button class="time-now-btn" onclick="setTimeToNow()">Nu</button>
+  </div>
+
+  <div class="substance-cards" style="margin-top:4px">
+    <div class="substance-card mph">
+      <div class="sub-label">MPH-IR</div>
+      <div class="dose-btns">
+        <button class="dose-btn" onclick="logDose('mph',5)">5 mg</button>
+        <button class="dose-btn" onclick="logDose('mph',10)">10 mg</button>
+        <button class="dose-btn" onclick="logDose('mph',20)">20 mg</button>
+      </div>
+    </div>
+    <div class="substance-card caffeine">
+      <div class="sub-label">Cafeïne</div>
+      <div class="dose-btns">
+        <button class="dose-btn" onclick="logDose('caffeine',50)">50 mg</button>
+        <button class="dose-btn" onclick="logDose('caffeine',100)">100 mg</button>
+        <button class="dose-btn" onclick="logDose('caffeine',150)">150 mg</button>
+      </div>
+    </div>
+    <div class="substance-card theanine">
+      <div class="sub-label">L-Theanine</div>
+      <div class="dose-btns">
+        <button class="dose-btn" onclick="logDose('theanine',100)">100 mg</button>
+        <button class="dose-btn" onclick="logDose('theanine',200)">200 mg</button>
+      </div>
+    </div>
+    <div class="substance-card elevanse">
+      <div class="sub-label">Elevanse</div>
+      <div class="dose-btns">
+        <button class="dose-btn" onclick="logDose('elevanse',30)">30 mg</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="focus-meter">
+    <div class="focus-num" id="focus-num">0</div>
+    <div class="focus-meta">
+      <div class="focus-meta-label">Focus efficiëntie — nu</div>
+      <div class="focus-bar">
+        <div class="focus-bar-fill" id="focus-fill" style="width:0%;background:var(--muted)"></div>
+      </div>
+    </div>
+    <div id="eff-target-badge" class="eff-target-badge"></div>
+  </div>
+
+  <div class="break-banner" id="break-banner">
+    <div class="break-banner-dot"></div>
+    <span id="break-banner-text">Pauze actief — aanbevelingen gepauzeerd</span>
+  </div>
+
+  <div class="crash-strip" id="crash-strip">
+    <div class="crash-dot" id="crash-dot"></div>
+    <span id="crash-text">Geen crash-risico gedetecteerd</span>
+  </div>
+
+  <div class="section-label">Plasma curve — vandaag</div>
+  <div class="chart-wrap">
+    <canvas id="focusChart"></canvas>
+  </div>
+
+  <div class="section-label">Doses vandaag</div>
+  <div class="dose-log" id="dose-log">
+    <div class="dose-empty">Geen doses geregistreerd</div>
+  </div>
+
+  <div class="section-label">Aanbevelingen</div>
+  <div id="opt-recs"><div class="opt-empty">Berekenen...</div></div>
+
+</div>
+
+<!-- ─────────────────── TAB 2: SLAAP ─────────────────── -->
+<div id="tab-sleep" class="tab-content">
+
+  <div class="slider-card">
+    <div class="slider-row">
+      <span class="slider-row-label">Slaaptijd</span>
+      <span class="slider-row-val" id="sleep-time-val">23:00</span>
+    </div>
+    <input type="range" id="sleep-slider" min="19" max="26" step="0.5" value="23" oninput="onSleepTime(this.value)">
+    <div class="slider-ends"><span>19:00</span><span>02:00</span></div>
+  </div>
+
+  <div class="slider-card">
+    <div class="slider-row">
+      <span class="slider-row-label">Uren geslapen vannacht</span>
+      <span class="slider-row-val" id="sleep-hrs-val">7.5 u</span>
+    </div>
+    <input type="range" id="hrs-slider" min="4" max="10" step="0.5" value="7.5" oninput="onSleepHours(this.value)">
+    <div class="slider-ends"><span>4 u</span><span>10 u</span></div>
+  </div>
+
+  <div class="sq-box" id="sq-box">
+    <div class="sq-dot" id="sq-dot"></div>
+    <div>
+      <div class="sq-label" id="sq-label">–</div>
+      <div class="sq-sub"   id="sq-sub">–</div>
+    </div>
+  </div>
+
+  <div class="section-label">Aanbevelingen</div>
+  <div class="rec-list" id="sleep-recs"></div>
+
+</div>
+
+<!-- ─────────────────── TAB 3: ADVIES ─────────────────── -->
+<div id="tab-advice" class="tab-content">
+  <div class="section-label">Waarschuwingen</div>
+  <div id="warnings"></div>
+
+  <div class="section-label">Dagschema</div>
+  <div class="rec-list" id="schedule"></div>
+
+  <div class="section-label">Veilig slaapvenster</div>
+  <div id="safe-window"></div>
+</div>
+
+<!-- ─────────────────── TAB 4: PLANNER ─────────────────── -->
+<div id="tab-planner" class="tab-content">
+
+  <div class="section-label">Studieduur</div>
+  <div class="slider-card">
+    <div class="slider-row">
+      <span class="slider-row-label">Hoeveel uur wil je studeren vandaag?</span>
+      <span class="slider-row-val" id="study-hrs-val">8 u</span>
+    </div>
+    <input type="range" id="study-hrs-slider" min="1" max="14" step="0.5" value="8" oninput="onStudyHours(this.value)">
+    <div class="slider-ends"><span>1 u</span><span>14 u</span></div>
+  </div>
+
+  <div class="time-picker" style="margin-bottom:0">
+    <label>Studiestart</label>
+    <input type="time" id="study-start-input" onchange="onStudyStart(this.value)">
+  </div>
+
+  <div class="section-label">Efficiëntiedoel</div>
+  <div class="eff-selector">
+    <button class="eff-btn" id="eff-btn-1" onclick="setEffTarget(1)">
+      <span class="eff-num">1</span>
+      <span class="eff-name">Mild</span>
+    </button>
+    <button class="eff-btn" id="eff-btn-2" onclick="setEffTarget(2)">
+      <span class="eff-num">2</span>
+      <span class="eff-name">Normaal</span>
+    </button>
+    <button class="eff-btn active" id="eff-btn-3" onclick="setEffTarget(3)">
+      <span class="eff-num">3</span>
+      <span class="eff-name">Hoog</span>
+    </button>
+    <button class="eff-btn lv4" id="eff-btn-4" onclick="setEffTarget(4)">
+      <span class="eff-num">4</span>
+      <span class="eff-name">Intensief</span>
+    </button>
+    <button class="eff-btn lv5" id="eff-btn-5" onclick="setEffTarget(5)">
+      <span class="eff-num">5</span>
+      <span class="eff-name">Maximaal</span>
+    </button>
+  </div>
+  <div class="eff-desc" id="eff-desc"></div>
+  <div class="chart-wrap" style="height:220px;margin-top:0">
+    <canvas id="plannerChart"></canvas>
+  </div>
+  <div id="honest-recs"></div>
+
+  <div class="section-label">Pauzes &amp; Maaltijden</div>
+  <div class="break-add-row">
+    <button class="break-add-btn" onclick="showBreakForm('break')">+ Pauze toevoegen</button>
+    <button class="break-add-btn" onclick="showBreakForm('meal')">+ Maaltijd toevoegen</button>
+  </div>
+
+  <div class="break-form" id="break-form" style="display:none">
+    <div class="break-form-row">
+      <label id="break-form-label">Type</label>
+    </div>
+    <div class="break-form-row">
+      <label>Starttijd</label>
+      <input type="time" id="break-time-input">
+      <button class="time-now-btn" style="margin-left:0" onclick="setBreakTimeNow()">Nu</button>
+    </div>
+    <div class="break-form-row">
+      <label>Duur</label>
+      <input type="number" id="break-dur-input" min="5" max="180" step="5" value="20">
+      <span style="font-size:.8rem;color:var(--muted)">minuten</span>
+    </div>
+    <div class="break-form-actions">
+      <button class="btn-primary" onclick="confirmBreak()">Opslaan</button>
+      <button class="btn-ghost"   onclick="hideBreakForm()">Annuleren</button>
+    </div>
+  </div>
+
+  <div class="break-list" id="break-list"></div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+/* ─── SUBSTANCE DEFINITIONS ─── */
+const SUB = {
+  mph: {
+    name: 'MPH-IR',
+    tmax:  90,
+    hl:   105,
+    ref:   10,
+    peak:  50,
+    color: '#a855f7',
+  },
+  caffeine: {
+    name: 'Cafeïne',
+    tmax:  38,
+    hl:   300,
+    ref:  100,
+    peak:  20,
+    color: '#f97316',
+  },
+  theanine: {
+    name: 'L-Theanine',
+    tmax:  45,
+    hl:    75,
+    ref:  100,
+    peak:  10,
+    color: '#22c55e',
+  },
+  elevanse: {
+    name: 'Elevanse',
+    tmax:  210,
+    hl:    660,
+    ref:   30,
+    peak:  55,
+    color: '#3b82f6',
+  },
+};
+
+const D_START = 6  * 60;
+const D_END   = 24 * 60;
+const STEP    = 5;
+
+/* ─── EFFICIENCY LEVEL DEFINITIONS ─── */
+const EFF_LEVELS = {
+  1: {
+    label: 'Mild / Ontspannen',
+    color: '#22c55e',
+    maxEff: 18,
+    desc: 'Cafeïne (max 100mg) + L-Theanine. Geen MPH. Lage cognitieve belasting, minimale bijwerkingen. Goed voor lichte studiebeurten of hersendagen.',
+    substances: [
+      { name: 'Cafeïne 75mg', timing: 'bij studiestart', color: '#f97316', subKey: 'caffeine', amount: 75, offsetMin: 0,
+        why: 'Adenosine-blokkade voor basale alertheid zonder stimulantia.', warn: false },
+      { name: 'L-Theanine 150mg', timing: 'bij studiestart', color: '#22c55e', subKey: 'theanine', amount: 150, offsetMin: 0,
+        why: '2:1 theanine:cafeïne ratio geeft kalme focus zonder jitter.', warn: false },
+    ],
+  },
+  2: {
+    label: 'Standaard',
+    color: '#22c55e',
+    maxEff: 35,
+    desc: 'Geoptimaliseerde MPH-IR + cafeïne + L-Theanine stack. Aanbevolen voor de meeste studiedagen — voorspelbaar en effectief.',
+    substances: [
+      { name: 'MPH-IR 10mg', timing: 'bij studiestart', color: '#a855f7', subKey: 'mph', amount: 10, offsetMin: 0,
+        why: 'Dopaminerge/noradrenerge boost voor executieve functies en werkgeheugen.', warn: false },
+      { name: 'Cafeïne 100mg', timing: '30 min na MPH', color: '#f97316', subKey: 'caffeine', amount: 100, offsetMin: 30,
+        why: 'Adenosine-blokkade + synergistisch effect met L-Theanine.', warn: false },
+      { name: 'L-Theanine 200mg', timing: '30 min na MPH', color: '#22c55e', subKey: 'theanine', amount: 200, offsetMin: 30,
+        why: '2:1 ratio met cafeïne maximaliseert focus-kwaliteit, buffert anxiogeniciteit.', warn: false },
+    ],
+  },
+  3: {
+    label: 'Hoog',
+    color: '#eab308',
+    maxEff: 52,
+    desc: 'Volle stack voor lange studiedagen (6-10u) of examenperiodes. MPH + cafeïne + theanine op geoptimaliseerde timing.',
+    substances: [
+      { name: 'MPH-IR 10mg', timing: 'bij studiestart', color: '#a855f7', subKey: 'mph', amount: 10, offsetMin: 0,
+        why: 'Startdosis voor ochtendblok.', warn: false },
+      { name: 'Cafeïne 125mg', timing: '30 min na MPH', color: '#f97316', subKey: 'caffeine', amount: 125, offsetMin: 30,
+        why: 'Hogere cafeïne voor langere sessie — adenosine-blokkade over meerdere uren.', warn: false },
+      { name: 'L-Theanine 250mg', timing: '30 min na MPH', color: '#22c55e', subKey: 'theanine', amount: 250, offsetMin: 30,
+        why: '2:1 ratio met cafeïne. Buffert MPH-jitter en verlengt kwalitatieve focus.', warn: false },
+      { name: 'MPH-IR 10mg (2e dosis)', timing: '3-4u na eerste dosis', color: '#a855f7', subKey: 'mph', amount: 10, offsetMin: 210,
+        why: 'Middagboost. Minimaal 3u tussen doses. Totaal: 20mg/dag.', warn: false },
+    ],
+  },
+  4: {
+    label: 'Intensief',
+    color: '#f97316',
+    maxEff: 65,
+    desc: 'Agressieve MPH-timing met maximale cafeïne/theanine ondersteuning. Je hebt level 4 gevraagd — hier is het eerlijke advies.',
+    substances: [
+      { name: 'MPH-IR 20mg', timing: 'bij studiestart', color: '#a855f7', subKey: 'mph', amount: 20, offsetMin: 0,
+        why: 'Hogere startdosis. NIET SLIM: inverted-U curve boven ~30mg, cardiovasculaire belasting neemt toe. Jij hebt dit level gekozen.', warn: true },
+      { name: 'Cafeïne 150mg', timing: '30-45 min na MPH', color: '#f97316', subKey: 'caffeine', amount: 150, offsetMin: 35,
+        why: 'Maximale cafeïne. 2:1 ratio met theanine essentieel bij hogere stimulant-load.', warn: false },
+      { name: 'L-Theanine 300mg', timing: '30-45 min na MPH', color: '#22c55e', subKey: 'theanine', amount: 300, offsetMin: 35,
+        why: 'Buffer voor MPH + cafeïne combinatie. Alpha-golven reduceren jitter.', warn: false },
+      { name: 'MPH-IR 10mg (2e dosis)', timing: '3-4u later', color: '#a855f7', subKey: 'mph', amount: 10, offsetMin: 210,
+        why: 'Middagboost. Totaal 30mg — binnen veilig bereik.', warn: false },
+      { name: 'Cafeïne 75mg (refresh)', timing: 'bij middag-dip', color: '#f97316', subKey: 'caffeine', amount: 75, offsetMin: 270,
+        why: 'Lichte refresh. Stop cafeïne uiterlijk 6u voor slaap.', warn: false },
+    ],
+  },
+  5: {
+    label: 'Maximaal',
+    color: '#ef4444',
+    maxEff: 78,
+    desc: 'Volledig maximale inzet van je beschikbare stack. Eerlijk advies zonder filter — ik zeg erbij wat niet slim is, maar ik adviseer het toch. Jij beslist.',
+    substances: [
+      { name: 'MPH-IR 20mg', timing: 'bij studiestart', color: '#a855f7', subKey: 'mph', amount: 20, offsetMin: 0,
+        why: 'NIET SLIM op slechte slaap of cardiovasculaire klachten. Jij hebt dit niveau gevraagd.', warn: true },
+      { name: 'Cafeïne 150mg', timing: '30 min na MPH', color: '#f97316', subKey: 'caffeine', amount: 150, offsetMin: 30,
+        why: 'Maximale cafeïne op synergistisch optimum.', warn: false },
+      { name: 'L-Theanine 300mg', timing: '30 min na MPH', color: '#22c55e', subKey: 'theanine', amount: 300, offsetMin: 30,
+        why: 'Buffer voor de volledige stimulant-load.', warn: false },
+      { name: 'MPH-IR 20mg (2e dosis)', timing: '3-4u later', color: '#a855f7', subKey: 'mph', amount: 20, offsetMin: 210,
+        why: 'Totaal 40mg/dag — jouw absolute maximum. Boven 40mg: cognitieve flexibiliteit daalt, rebound en slaapproblemen nemen sterk toe.', warn: true },
+      { name: 'Cafeïne 100mg', timing: 'bij middag-dip (niet na 15:00)', color: '#f97316', subKey: 'caffeine', amount: 100, offsetMin: 270,
+        why: 'Derde cafeïne voor avondblok. Stop ruim voor slaaptijd.', warn: false },
+      { name: 'L-Theanine 200mg', timing: 'bij middag-dip', color: '#22c55e', subKey: 'theanine', amount: 200, offsetMin: 270,
+        why: 'Tweede theanine-dosis voor avondkwaliteit.', warn: false },
+    ],
+  },
+};
+
+/* ─── STATE ─── */
+let S = {
+  doses:      [],
+  sleepTime:  23 * 60,
+  sleepHrs:   7.5,
+  effTarget:  3,
+  studyHours: 8,
+  studyStart: 8 * 60,
+  breaks:     [],
+};
+
+let breakFormType = 'break';
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem('fst_v3');
+    if (!raw) return;
+    const p = JSON.parse(raw);
+    const today = new Date().toDateString();
+    S = {
+      doses:      (p.doses || []).filter(d => d.date === today),
+      sleepTime:  p.sleepTime  ?? 23 * 60,
+      sleepHrs:   p.sleepHrs   ?? 7.5,
+      effTarget:  p.effTarget  ?? 3,
+      studyHours: p.studyHours ?? 8,
+      studyStart: p.studyStart ?? 8 * 60,
+      breaks:     (p.breaks || []).filter(b => b.date === today),
+    };
+  } catch (_) {}
+}
+
+function save() {
+  localStorage.setItem('fst_v3', JSON.stringify(S));
+}
+
+/* ─── BREAK UTILS ─── */
+function isInBreak(t) {
+  return S.breaks.some(b => t >= b.startMin && t < b.startMin + b.durationMin);
+}
+
+function activeBreak() {
+  const now = nowMin();
+  return S.breaks.find(b => now >= b.startMin && now < b.startMin + b.durationMin) || null;
+}
+
+/* ─── PHARMACOLOGICAL MODEL ─── */
+function concAt(dose, queryMin) {
+  const s  = SUB[dose.substance];
+  const dt = queryMin - dose.time;
+  if (dt <= 0) return 0;
+  const norm = (dose.amount / s.ref) * s.peak;
+  if (dt <= s.tmax) return (dt / s.tmax) * norm;
+  return norm * Math.pow(0.5, (dt - s.tmax) / s.hl);
+}
+
+function subCurve(substance, pts) {
+  const doses = S.doses.filter(d => d.substance === substance);
+  return pts.map(t => doses.reduce((a, d) => a + concAt(d, t), 0));
+}
+
+function totalCurve(pts, mphC, caffC, theaC) {
+  return pts.map((_, i) => {
+    const base = mphC[i] + caffC[i] + theaC[i];
+    const buf  = Math.min(theaC[i] * 0.5, (mphC[i] + caffC[i]) * 0.15);
+    return Math.max(0, base - buf);
+  });
+}
+
+function buildPts() {
+  const pts = [];
+  for (let t = D_START; t <= D_END; t += STEP) pts.push(t);
+  return pts;
+}
+
+function crashRisk(pts, total) {
+  const now = nowMin();
+  const i0  = pts.findIndex(t => t >= now);
+  if (i0 < 0 || i0 + 12 >= pts.length) return null;
+  const cur = total[i0];
+  if (cur < 4) return null;
+  const fut  = total[i0 + 12];
+  const drop = (cur - fut) / cur;
+  if (drop > 0.30) return { pct: Math.round(drop * 100) };
+  return null;
+}
+
+function lastSafeIntake(subKey) {
+  const s = SUB[subKey];
+  const clearMin = s.tmax + s.hl * Math.log(1 / 0.15) / Math.log(2);
+  return S.sleepTime - clearMin;
+}
+
+/* ─── FOCUS EFFICIENCY MODEL ─── */
+function focusEfficiency(pts, mphC, caffC, theaC, elevC) {
+  const ev = elevC || [];
+  return pts.map((_, i) => {
+    const mph  = mphC[i] + (ev[i] || 0);
+    const caff = caffC[i];
+    const thea = theaC[i];
+    if (mph + caff + thea < 0.3) return 0;
+
+    const mphDecay = mph > 55 ? Math.exp(-0.018 * (mph - 55)) : 1.0;
+    const mphEff   = mph * Math.max(0.45, mphDecay);
+
+    const ratio   = caff > 0.5 ? thea / caff : (thea > 0 ? 2 : 0);
+    const synergy = ratio >= 1.0 ? 1.35 : ratio >= 0.5 ? 1.18 : ratio >= 0.2 ? 1.06 : 1.0;
+    const caffEff = caff * synergy;
+
+    const theaBonus = Math.min(thea * 0.9, (mphEff + caff) * 0.22);
+
+    const stimLoad = mphEff + caff;
+    const penalty  = Math.max(0, (stimLoad - 62) * 0.38);
+
+    return Math.max(0, mphEff + caffEff + theaBonus - penalty);
+  });
+}
+
+/* ─── RECOMMEND CURVE ─── */
+function recommendCurve(pts) {
+  const maxEff   = EFF_LEVELS[S.effTarget].maxEff;
+  const studyEnd = S.studyStart + S.studyHours * 60;
+
+  return pts.map(t => {
+    if (t < S.studyStart || t > studyEnd) return 0;
+    if (isInBreak(t)) return 0;
+
+    const elapsed  = t - S.studyStart;
+    const total    = S.studyHours * 60;
+
+    let shape = 1.0;
+    if (elapsed < 20) {
+      shape = elapsed / 20;
+    } else if (elapsed > total - 20) {
+      shape = (total - elapsed) / 20;
+    } else if (S.studyHours >= 5) {
+      const studyHr = (elapsed / 60);
+      const dipAt   = S.studyHours * 0.58;
+      const dipDist = Math.abs(studyHr - dipAt);
+      if (dipDist < 1.2) {
+        const dipDepth = 0.28 * (1 - (dipDist / 1.2));
+        shape = 1.0 - dipDepth;
+      }
+    }
+
+    return Math.max(0, shape * maxEff);
+  });
+}
+
+function threshold() {
+  const h = S.sleepHrs;
+  if (h >= 7.5) return 20;
+  if (h >= 6.5) return 16;
+  if (h >= 5.5) return 12;
+  return 8;
+}
+
+/* ─── TIME UTILS ─── */
+function nowMin() {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+function fmtMin(m) {
+  const mm = ((m % 1440) + 1440) % 1440;
+  return `${String(Math.floor(mm / 60)).padStart(2,'0')}:${String(Math.floor(mm % 60)).padStart(2,'0')}`;
+}
+
+function minToTimeVal(m) {
+  const mm = ((m % 1440) + 1440) % 1440;
+  return `${String(Math.floor(mm / 60)).padStart(2,'0')}:${String(Math.floor(mm % 60)).padStart(2,'0')}`;
+}
+
+/* ─── CHART ─── */
+let chart = null;
+let cachedPts = null;
+
+const pluginNowLine = {
+  id: 'nowLine',
+  afterDraw(ch) {
+    const now = nowMin();
+    if (now < D_START || now > D_END) return;
+    const pts = cachedPts || buildPts();
+    const i   = pts.findIndex(t => t >= now);
+    if (i < 0) return;
+    const { ctx, scales: { x, y } } = ch;
+    const px = x.getPixelForValue(i);
+    ctx.save();
+    ctx.beginPath();
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = 'rgba(255,255,255,.55)';
+    ctx.lineWidth = 1.5;
+    ctx.moveTo(px, y.top); ctx.lineTo(px, y.bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255,255,255,.7)';
+    ctx.font = 'bold 9px system-ui';
+    ctx.fillText('Nu', px + 4, y.top + 11);
+    ctx.restore();
+  }
+};
+
+const pluginSleepZone = {
+  id: 'sleepZone',
+  afterDraw(ch) {
+    const st = S.sleepTime;
+    if (st > D_END) return;
+    const pts = cachedPts || buildPts();
+    let i = pts.findIndex(t => t >= st);
+    if (i < 0) i = pts.length - 1;
+    const { ctx, scales: { x, y }, data } = ch;
+    const px = x.getPixelForValue(i);
+    const mD = data.datasets[1].data;
+    const cD = data.datasets[2].data;
+    const eD = data.datasets[4].data;
+    const stimAt = j => (mD[j] || 0) + (cD[j] || 0) + (eD[j] || 0);
+    const pk = Math.max(...mD.map((_, j) => stimAt(j)));
+    if (pk > 0 && stimAt(i) / pk > 0.15) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(239,68,68,.065)';
+      ctx.fillRect(px, y.top, x.right - px, y.bottom - y.top);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.beginPath();
+    ctx.setLineDash([6, 3]);
+    ctx.strokeStyle = 'rgba(239,68,68,.65)';
+    ctx.lineWidth = 1.5;
+    ctx.moveTo(px, y.top); ctx.lineTo(px, y.bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(239,68,68,.85)';
+    ctx.font = 'bold 9px system-ui';
+    ctx.fillText('Slaap', px + 4, y.top + 11);
+    ctx.restore();
+  }
+};
+
+const pluginBreakZones = {
+  id: 'breakZones',
+  afterDraw(ch) {
+    if (!S.breaks.length) return;
+    const pts = cachedPts || buildPts();
+    const { ctx, scales: { x, y } } = ch;
+    S.breaks.forEach(b => {
+      const si = pts.findIndex(t => t >= b.startMin);
+      const ei = pts.findIndex(t => t >= b.startMin + b.durationMin);
+      if (si < 0) return;
+      const ex = ei >= 0 ? ei : pts.length - 1;
+      ctx.save();
+      ctx.fillStyle = b.type === 'meal'
+        ? 'rgba(234,179,8,.08)'
+        : 'rgba(100,100,180,.07)';
+      ctx.fillRect(
+        x.getPixelForValue(si), y.top,
+        x.getPixelForValue(ex) - x.getPixelForValue(si),
+        y.bottom - y.top
+      );
+      ctx.restore();
+    });
+  }
+};
+
+function initChart() {
+  cachedPts = buildPts();
+  const labels = cachedPts.map(t => fmtMin(t));
+  const zeros  = new Array(cachedPts.length).fill(0);
+  const ctx    = document.getElementById('focusChart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label:'Streefzone',         data:[...zeros], borderColor:'rgba(251,191,36,.45)', backgroundColor:'rgba(251,191,36,.08)', borderWidth:1.2, borderDash:[4,3], fill:true, tension:.5, pointRadius:0, order:10 },
+        { label:'MPH-IR',             data:[...zeros], borderColor:'#a855f7', backgroundColor:'rgba(168,85,247,.07)',  borderWidth:1.5, fill:true, tension:.4, pointRadius:0, order:1 },
+        { label:'Cafeïne',            data:[...zeros], borderColor:'#f97316', backgroundColor:'rgba(249,115,22,.07)',  borderWidth:1.5, fill:true, tension:.4, pointRadius:0, order:1 },
+        { label:'L-Theanine',         data:[...zeros], borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.07)',   borderWidth:1.5, fill:true, tension:.4, pointRadius:0, order:1 },
+        { label:'Elevanse',           data:[...zeros], borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,.07)',  borderWidth:1.5, fill:true, tension:.4, pointRadius:0, order:1 },
+        { label:'Focus Efficiëntie',  data:[...zeros], borderColor:'#94a3b8', backgroundColor:'transparent', borderWidth:2.5, fill:false, tension:.4, pointRadius:0, order:0 },
+        { label:'Drempel',            data:[...zeros], borderColor:'rgba(255,255,255,.18)', backgroundColor:'transparent', borderWidth:1, borderDash:[5,4], fill:false, tension:0, pointRadius:0, order:1 },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 280 },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { color:'#6668a0', font:{ size:10 }, boxWidth:10, padding:10, usePointStyle:true }
+        },
+        tooltip: {
+          backgroundColor:'#161620', borderColor:'#252535', borderWidth:1,
+          titleColor:'#dde0f0', bodyColor:'#6668a0',
+          mode:'index', intersect:false,
+          callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y.toFixed(1)}` }
+        },
+      },
+      scales: {
+        x: {
+          grid: { color:'rgba(37,37,53,.9)' },
+          ticks: {
+            color:'#6668a0', font:{ size:9 }, maxTicksLimit:10,
+            callback(v) { const l = this.getLabelForValue(v); return l && l.endsWith(':00') ? l : ''; }
+          },
+          border: { display:false },
+        },
+        y: {
+          min: 0,
+          suggestedMax: 80,
+          grid: { color:'rgba(37,37,53,.9)' },
+          ticks: { color:'#6668a0', font:{ size:9 }, maxTicksLimit:6 },
+          border: { display:false },
+        }
+      },
+      interaction: { mode:'index', intersect:false },
+    },
+    plugins: [pluginNowLine, pluginSleepZone, pluginBreakZones],
+  });
+}
+
+function refreshChart() {
+  if (!chart) return;
+  const pts   = cachedPts || buildPts();
+  const mphC  = subCurve('mph',      pts);
+  const caffC = subCurve('caffeine', pts);
+  const theaC = subCurve('theanine', pts);
+  const elevC = subCurve('elevanse', pts);
+  const effC  = focusEfficiency(pts, mphC, caffC, theaC, elevC);
+  const recC  = recommendCurve(pts);
+  const thr   = threshold();
+
+  chart.data.datasets[0].data = recC;
+  chart.data.datasets[1].data = mphC;
+  chart.data.datasets[2].data = caffC;
+  chart.data.datasets[3].data = theaC;
+  chart.data.datasets[4].data = elevC;
+  chart.data.datasets[5].data = effC;
+  chart.data.datasets[6].data = pts.map(() => thr);
+  chart.update();
+
+  const now  = nowMin();
+  const nowI = pts.findIndex(t => t >= now);
+  const fi   = nowI >= 0 ? effC[nowI] : 0;
+  document.getElementById('focus-num').textContent = Math.round(fi);
+  const fill = document.getElementById('focus-fill');
+  const pct  = Math.min(fi, 100);
+  fill.style.width = pct + '%';
+  fill.style.background = fi >= 55 ? 'var(--mph)' : fi >= 28 ? 'var(--caffeine)' : 'var(--muted)';
+
+  const lvl   = EFF_LEVELS[S.effTarget];
+  const badge = document.getElementById('eff-target-badge');
+  badge.textContent   = `L${S.effTarget} · ${lvl.label}`;
+  badge.style.background = lvl.color + '22';
+  badge.style.color      = lvl.color;
+  badge.style.border     = `1px solid ${lvl.color}55`;
+
+  const cr    = crashRisk(pts, effC);
+  const strip = document.getElementById('crash-strip');
+  document.getElementById('crash-text').textContent = cr
+    ? `⚠ Crash-risico: ~${cr.pct}% daling verwacht binnen 1 uur`
+    : 'Geen crash-risico gedetecteerd';
+  strip.classList.toggle('active', !!cr);
+
+  const ab     = activeBreak();
+  const banner = document.getElementById('break-banner');
+  banner.classList.toggle('active', !!ab);
+  if (ab) {
+    const end = fmtMin(ab.startMin + ab.durationMin);
+    document.getElementById('break-banner-text').textContent =
+      `${ab.type === 'meal' ? 'Maaltijd' : 'Pauze'} actief — aanbevelingen gepauzeerd (tot ${end})`;
+  }
+}
+
+/* ─── DOSE MANAGEMENT ─── */
+function setTimeToNow() {
+  const d = new Date();
+  document.getElementById('dose-time-input').value =
+    `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function getLogTime() {
+  const v = document.getElementById('dose-time-input').value;
+  if (v) { const [h, m] = v.split(':').map(Number); return h * 60 + m; }
+  const d = new Date(); return d.getHours() * 60 + d.getMinutes();
+}
+
+function logDose(substance, amount) {
+  const today = new Date();
+  S.doses.push({ id: Date.now(), substance, amount, time: getLogTime(), date: today.toDateString() });
+  save(); renderAll(); flashCard(substance);
+  toast(`${SUB[substance].name} ${amount} mg gelogd`);
+}
+
+function removeDose(id) {
+  S.doses = S.doses.filter(d => d.id !== id);
+  save(); renderAll();
+}
+
+function renderDoseLog() {
+  const el     = document.getElementById('dose-log');
+  const sorted = [...S.doses].sort((a,b) => a.time - b.time);
+  if (!sorted.length) {
+    el.innerHTML = '<div class="dose-empty">Geen doses geregistreerd</div>'; return;
+  }
+  el.innerHTML = sorted.map(d => `
+    <div class="dose-item">
+      <div class="dose-dot" style="background:${SUB[d.substance].color}"></div>
+      <div class="dose-time">${fmtMin(d.time)}</div>
+      <div class="dose-name">${SUB[d.substance].name}</div>
+      <div class="dose-mg">${d.amount} mg</div>
+      <button class="dose-rm" onclick="removeDose(${d.id})" title="Verwijder">×</button>
+    </div>
+  `).join('');
+}
+
+function flashCard(sub) {
+  const el = document.querySelector(`.substance-card.${sub}`);
+  if (!el) return;
+  el.style.transform = 'scale(1.04)';
+  setTimeout(() => { el.style.transform = ''; }, 160);
+}
+
+/* ─── OPTIMIZATION ENGINE ─── */
+function generateOptimalRecommendations() {
+  if (activeBreak()) return [];
+
+  const pts   = cachedPts || buildPts();
+  const now   = nowMin();
+  const nowI  = pts.findIndex(t => t >= now);
+  if (nowI < 0) return [];
+
+  const mphC  = subCurve('mph',      pts);
+  const caffC = subCurve('caffeine', pts);
+  const theaC = subCurve('theanine', pts);
+  const elevC = subCurve('elevanse', pts);
+  const effC  = focusEfficiency(pts, mphC, caffC, theaC, elevC);
+  const recC  = recommendCurve(pts);
+
+  const sleepMin  = Math.min(S.sleepTime, D_END);
+  const sleepI    = pts.findIndex(t => t >= sleepMin);
+  const studyEnd  = S.studyStart + S.studyHours * 60;
+  const studyEndI = pts.findIndex(t => t >= Math.min(studyEnd, sleepMin));
+  const endI = (studyEndI > nowI ? studyEndI : sleepI > nowI ? sleepI : pts.length) - 1;
+  if (endI <= nowI) return [];
+
+  const lastCaff = lastSafeIntake('caffeine');
+  const lastMphT = lastSafeIntake('mph');
+
+  const mphTaken = S.doses.filter(d => d.substance === 'mph').reduce((s, d) => s + d.amount, 0);
+  let mphLeft = Math.max(0, 40 - mphTaken);
+
+  const recs    = [];
+  const lastByT = {};
+
+  function canAdd(sub, t) {
+    const gap = sub === 'mph' ? 180 : 85;
+    return !lastByT[sub] || t - lastByT[sub] >= gap;
+  }
+
+  function addRec(intakeT, sub, amt, reason, warn) {
+    const t = Math.max(now, Math.round(intakeT / 5) * 5);
+    if (!canAdd(sub, t)) return;
+    if (sub === 'mph') {
+      if (amt > mphLeft) return;
+      mphLeft -= amt;
+    }
+    recs.push({ time: t, substance: sub, amount: amt, reason, warn: warn || false });
+    lastByT[sub] = t;
+  }
+
+  function gain(i, sub, amt, intakeT) {
+    const fd = { substance: sub, amount: amt, time: intakeT };
+    const m  = mphC[i]  + (sub === 'mph'      ? concAt(fd, pts[i]) : 0);
+    const ca = caffC[i] + (sub === 'caffeine' ? concAt(fd, pts[i]) : 0);
+    const th = theaC[i] + (sub === 'theanine' ? concAt(fd, pts[i]) : 0);
+    return focusEfficiency([pts[i]], [m], [ca], [th])[0] - effC[i];
+  }
+
+  const caffNow = caffC[nowI];
+  const theaNow = theaC[nowI];
+  if (caffNow > 5 && theaNow / caffNow < 0.7) {
+    const dose = (caffNow - theaNow) > 8 ? 200 : 100;
+    addRec(now, 'theanine', dose,
+      `Cafeïne:theanine ratio herstellen (huidig ${(theaNow / caffNow).toFixed(2)}:1, doel ≥1:1) — 2:1 ratio geeft tot +35% synergistisch effect`);
+  }
+
+  for (let i = nowI + 6; i <= endI; i += 6) {
+    const t   = pts[i];
+    if (isInBreak(t)) continue;
+
+    const gap = recC[i] - effC[i];
+    if (gap < 10) continue;
+
+    const theaT = Math.max(now, t - SUB.theanine.tmax);
+    const caffT = Math.max(now, t - SUB.caffeine.tmax);
+    const mphT  = Math.max(now, t - SUB.mph.tmax);
+
+    const gT100 = (theaT <= sleepMin - 30 && canAdd('theanine', theaT)) ? gain(i, 'theanine', 100, theaT) : -1;
+    const gT200 = (theaT <= sleepMin - 30 && canAdd('theanine', theaT)) ? gain(i, 'theanine', 200, theaT) : -1;
+    const gC50  = (caffT <= lastCaff && canAdd('caffeine', caffT))       ? gain(i, 'caffeine',  50, caffT) : -1;
+    const gC100 = (caffT <= lastCaff && canAdd('caffeine', caffT))       ? gain(i, 'caffeine', 100, caffT) : -1;
+
+    const mphDose = mphLeft >= 10 ? 10 : mphLeft >= 5 ? 5 : 0;
+    const gMph = (mphDose > 0 && mphT <= lastMphT && canAdd('mph', mphT)) ? gain(i, 'mph', mphDose, mphT) : -1;
+
+    const theaAmt  = gT200 > gT100 * 1.15 ? 200 : 100;
+    const caffAmt  = gC100 > gC50  * 1.15 ? 100 :  50;
+    const bestThea = Math.max(gT100, gT200);
+    const bestCaff = Math.max(gC50,  gC100);
+    const bestGain = Math.max(bestThea, bestCaff, gMph);
+
+    if (bestGain < 4) continue;
+
+    if (gMph >= bestThea && gMph >= bestCaff) {
+      const budgetNa = mphLeft - mphDose;
+      addRec(mphT, 'mph', mphDose,
+        `MPH-spiegel daalt — dopaminerge/noradrenerge boost (dagbudget na: ${budgetNa} mg / 40 mg)`);
+      if (theaT <= sleepMin - 30 && gT100 > 1 && canAdd('theanine', theaT))
+        addRec(theaT, 'theanine', 100, `Combineer met MPH: L-Theanine reduceert jitter, induceert alpha-golven`);
+
+    } else if (bestThea >= bestCaff) {
+      const ratio = caffC[i] > 1 ? theaC[i] / caffC[i] : -1;
+      let reason;
+      if (ratio >= 0 && ratio < 0.7 && caffC[i] > 3)
+        reason = `Cafeïne:theanine ratio herstellen — 2:1 maximaliseert synergistisch efficiëntie-effect`;
+      else if (mphC[i] > 5)
+        reason = `MPH actief: L-Theanine reduceert jitter en versterkt alpha-golven`;
+      else
+        reason = `Verwachte efficiëntiedip — L-Theanine vult focus-kwaliteit aan`;
+      addRec(theaT, 'theanine', theaAmt, reason);
+
+    } else {
+      addRec(caffT, 'caffeine', caffAmt,
+        `Cafeïne-niveau daalt — adenosine-blokkade vernieuwen voor aandacht & alertheid`);
+      if (theaT <= sleepMin - 30 && canAdd('theanine', theaT))
+        addRec(theaT, 'theanine', 100, `Combineer met cafeïne: 2:1 ratio buffert anxiogene bijwerkingen`);
+    }
+
+    if (recs.length >= 6) break;
+  }
+
+  const evT = sleepMin - 90;
+  if (evT > now + 30 && canAdd('theanine', evT)) {
+    const evI = pts.findIndex(t => t >= evT);
+    if (evI >= 0 && mphC[evI] + caffC[evI] < 15)
+      addRec(evT, 'theanine', 200, `Slaapvoorbereiding: GABA-potentiëring & alpha-golven — geen sedatie`);
+  }
+
+  return recs.sort((a, b) => a.time - b.time).slice(0, 7);
+}
+
+function renderOptRecs() {
+  const el   = document.getElementById('opt-recs');
+  const ab   = activeBreak();
+  if (ab) {
+    const end = fmtMin(ab.startMin + ab.durationMin);
+    el.innerHTML = `<div class="opt-empty">${ab.type === 'meal' ? '🍽' : '⏸'} ${ab.type === 'meal' ? 'Maaltijd' : 'Pauze'} actief tot ${end} — aanbevelingen hervat daarna</div>`;
+    return;
+  }
+
+  const recs = generateOptimalRecommendations();
+  const COL  = { mph:'#a855f7', caffeine:'#f97316', theanine:'#22c55e' };
+  const now  = nowMin();
+
+  if (!recs.length) {
+    el.innerHTML = '<div class="opt-empty">✓ Stack optimaal — geen aanpassingen nodig</div>'; return;
+  }
+
+  el.innerHTML = recs.map(r => {
+    const isNow   = r.time <= now + 4;
+    const timeStr = isNow ? 'Nu' : fmtMin(r.time);
+    const col   = COL[r.substance] || '#6668a0';
+    const label = `${SUB[r.substance].name} ${r.amount} mg`;
+    return `
+      <div class="opt-rec ${r.substance}">
+        <div class="opt-time${isNow ? ' now-label' : ''}">${timeStr}</div>
+        <div class="opt-dot" style="background:${col}"></div>
+        <div class="opt-body">
+          <div class="opt-dose">${label}</div>
+          <div class="opt-why">${r.reason}</div>
+          ${r.warn ? `<div class="opt-warn">⚠ Eerlijk advies — overweeg risico's</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+/* ─── SLEEP TAB ─── */
+function onSleepTime(v) {
+  const h = parseFloat(v);
+  S.sleepTime = h * 60;
+  save();
+  const dh = h >= 24 ? h - 24 : h;
+  const hh = Math.floor(dh), mm = Math.round((dh - hh) * 60);
+  document.getElementById('sleep-time-val').textContent =
+    `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+  renderAll();
+}
+
+function onSleepHours(v) {
+  S.sleepHrs = parseFloat(v);
+  save();
+  document.getElementById('sleep-hrs-val').textContent = `${v} u`;
+  renderAll();
+}
+
+const SQ_LEVELS = [
+  { min:7.5, max:10,  label:'Optimale nachtrust',  sub:'Normale gevoeligheid voor stimulantia',             color:'#22c55e', bg:'rgba(34,197,94,.07)',   bd:'rgba(34,197,94,.28)' },
+  { min:6.5, max:7.5, label:'Goede nachtrust',      sub:'Licht verlaagde slaapdruk',                        color:'#86efac', bg:'rgba(134,239,172,.07)', bd:'rgba(134,239,172,.28)' },
+  { min:5.5, max:6.5, label:'Matige nachtrust',     sub:'Verhoogde adenosine-druk — voorzichtig doseren',   color:'#eab308', bg:'rgba(234,179,8,.07)',   bd:'rgba(234,179,8,.28)' },
+  { min:0,   max:5.5, label:'Slechte nachtrust',    sub:'Hoog rebound-risico — verlaag dosering',           color:'#ef4444', bg:'rgba(239,68,68,.07)',   bd:'rgba(239,68,68,.28)' },
+];
+
+function sleepQuality() {
+  return SQ_LEVELS.find(l => S.sleepHrs >= l.min && S.sleepHrs < l.max) || SQ_LEVELS[3];
+}
+
+function renderSleepTab() {
+  const q = sleepQuality();
+  const box = document.getElementById('sq-box');
+  box.style.background  = q.bg;
+  box.style.borderColor = q.bd;
+  document.getElementById('sq-dot').style.background  = q.color;
+  document.getElementById('sq-label').textContent     = q.label;
+  document.getElementById('sq-label').style.color     = q.color;
+  document.getElementById('sq-sub').textContent       = q.sub;
+
+  const lsc  = lastSafeIntake('caffeine');
+  const lsm  = lastSafeIntake('mph');
+  const lse  = lastSafeIntake('elevanse');
+  const hase = S.doses.some(d => d.substance === 'elevanse');
+  const hasc = S.doses.some(d => d.substance === 'caffeine');
+  const hasm = S.doses.some(d => d.substance === 'mph');
+  const hast = S.doses.some(d => d.substance === 'theanine');
+
+  const recs = [];
+  recs.push({ ico:'⏰', txt:`Laatste cafeïne uiterlijk om <strong>${fmtMin(lsc)}</strong> voor slaap om ${fmtMin(S.sleepTime)}` });
+  recs.push({ ico:'⏰', txt:`Laatste MPH-IR uiterlijk om <strong>${fmtMin(lsm)}</strong>` });
+  if (hase) recs.push({ ico:'⏰', txt:`Elevanse (lisdexamfetamine) uiterlijk om <strong>${fmtMin(lse)}</strong> — lange halfwaardetijd (~11u)` });
+  if (S.sleepHrs < 5.5)
+    recs.push({ ico:'😴', txt:'Slechte nachtrust: verlaag MPH met 25–50% — verhoogde prikkelgevoeligheid en reboundkans' });
+  else if (S.sleepHrs < 6.5)
+    recs.push({ ico:'⚠', txt:'Matige nachtrust: stimulantia-effecten sterker dan normaal. Extra doses vermijden.' });
+  else
+    recs.push({ ico:'✓', txt:'Nachtrust voldoende — normale effectiviteitsdrempel van toepassing' });
+  if ((hasc || hasm) && !hast)
+    recs.push({ ico:'🌿', txt:'Overweeg L-Theanine als buffer — cleaner, rustigere focus zonder sedatie' });
+
+  document.getElementById('sleep-recs').innerHTML = recs.map(r =>
+    `<div class="rec-item"><span class="rec-ico">${r.ico}</span><span>${r.txt}</span></div>`
+  ).join('');
+}
+
+/* ─── ADVICE TAB ─── */
+function renderAdviceTab() {
+  const pts   = cachedPts || buildPts();
+  const mphC  = subCurve('mph',      pts);
+  const caffC = subCurve('caffeine', pts);
+  const theaC = subCurve('theanine', pts);
+  const elevC = subCurve('elevanse', pts);
+  const stimC = pts.map((_, j) => mphC[j] + caffC[j] + elevC[j]);
+  const pkStim = Math.max(...stimC);
+  const pkMph  = Math.max(...mphC, ...elevC);
+  const pkCaf  = Math.max(...caffC);
+  const effC   = focusEfficiency(pts, mphC, caffC, theaC, elevC);
+  const pkEff  = Math.max(...effC);
+
+  const warns = [];
+  if (pkMph > 35 && pkCaf > 8)
+    warns.push({ title:'Hoge combinatiebelasting', txt:'MPH en cafeïne beide significant actief. Verhoogde cardiovasculaire belasting — max 50-100mg cafeïne bij MPH-gebruik.' });
+  if (pkMph > 80)
+    warns.push({ title:'Hoge MPH-piek', txt:`Gecumuleerde MPH-piek (${Math.round(pkMph)} units) is hoog. Inverted-U curve: te hoge dopaminerge tonus vermindert cognitieve flexibiliteit (Arnsten, 2011).` });
+  const totRaw = totalCurve(pts, mphC, caffC, theaC);
+  const pkRaw  = Math.max(...totRaw);
+  if (pkRaw > 0 && pkEff / pkRaw < 0.75 && pkRaw > 30)
+    warns.push({ title:'Suboptimale efficiëntie', txt:'Hoge plasmaspiegel maar lage efficiëntie — verlaag cafeïne, voeg L-Theanine toe (2:1 ratio).' });
+
+  const si = pts.findIndex(t => t >= Math.min(S.sleepTime, D_END));
+  if (si >= 0 && pkStim > 0) {
+    const sv = stimC[si];
+    if (sv / pkStim > 0.30)
+      warns.push({ title:'Stimulantia actief bij slaaptijd', txt:`Om ${fmtMin(S.sleepTime)} is nog ${Math.round(sv/pkStim*100)}% van de MPH+cafeïne-piek actief. L-Theanine verstoort slaap niet.` });
+  }
+
+  const wEl = document.getElementById('warnings');
+  if (!warns.length) {
+    wEl.innerHTML = '<div class="ok-box">✓ Geen waarschuwingen — stack ziet er goed uit voor vandaag</div>';
+  } else {
+    wEl.innerHTML = warns.map(w =>
+      `<div class="warn-box"><div class="warn-title">${w.title}</div><div class="warn-text">${w.txt}</div></div>`
+    ).join('');
+  }
+
+  const now  = nowMin();
+  const lsc  = lastSafeIntake('caffeine');
+  const lsm  = lastSafeIntake('mph');
+  const rows = [];
+
+  S.doses.forEach(d => rows.push({ t: d.time, col: SUB[d.substance].color, desc: `${SUB[d.substance].name} ${d.amount} mg ingenomen`, past: true }));
+  S.breaks.forEach(b => rows.push({ t: b.startMin, col: b.type === 'meal' ? '#eab308' : '#6668a0', desc: `${b.type === 'meal' ? 'Maaltijd' : 'Pauze'} (${b.durationMin} min)`, past: b.startMin + b.durationMin < now }));
+  const lsce = lastSafeIntake('elevanse');
+  if (lsc  > now) rows.push({ t: lsc,  col: '#f97316', desc: 'Deadline laatste cafeïne-inname',  past: false });
+  if (lsm  > now) rows.push({ t: lsm,  col: '#a855f7', desc: 'Deadline laatste MPH-IR-inname',   past: false });
+  if (lsce > now && S.doses.some(d => d.substance === 'elevanse'))
+    rows.push({ t: lsce, col: '#3b82f6', desc: 'Deadline laatste Elevanse-inname', past: false });
+  rows.push({ t: S.sleepTime, col: '#94a3b8', desc: 'Geplande slaaptijd', past: false });
+  rows.sort((a,b) => a.t - b.t);
+
+  document.getElementById('schedule').innerHTML = rows.map(r => `
+    <div class="schedule-row">
+      <div class="sch-time" style="color:${r.past?'var(--muted)':'var(--text)'}">${fmtMin(r.t)}</div>
+      <div class="sch-dot" style="background:${r.col}"></div>
+      <div class="sch-desc">${r.desc}</div>
+    </div>
+  `).join('');
+
+  const swEl = document.getElementById('safe-window');
+  if (pkStim < 1) {
+    swEl.innerHTML = '<div class="safe-box"><div class="safe-title">Veilig slaapvenster</div><div class="safe-text">Geen actieve stimulantia — slaap op elk gewenst moment.</div></div>';
+    return;
+  }
+  let clearI = -1;
+  for (let i = (si >= 0 ? si : 0); i < pts.length; i++) {
+    if (stimC[i] / pkStim <= 0.15) { clearI = i; break; }
+  }
+  const sleepVal = si >= 0 ? stimC[si] : 0;
+  const clearOk  = pkStim === 0 || sleepVal / pkStim <= 0.15;
+  if (clearOk) {
+    let extra = '';
+    if (clearI >= 0) extra = ` Stimulantia &lt;15% van piek vanaf <strong>${fmtMin(pts[clearI])}</strong>.`;
+    swEl.innerHTML = `<div class="safe-box"><div class="safe-title">Veilig slaapvenster</div><div class="safe-text">Stimulantiaspiegel voldoende laag bij slaaptijd ${fmtMin(S.sleepTime)}.${extra}</div></div>`;
+  } else {
+    const recSleep = clearI >= 0 ? fmtMin(pts[clearI]) : 'na middernacht';
+    swEl.innerHTML = `<div class="warn-box"><div class="warn-title">Slaapvenster risico</div><div class="warn-text">Om ${fmtMin(S.sleepTime)} is nog ${Math.round(sleepVal/pkStim*100)}% van de stimulantiapiek actief.<br><br>Aanbevolen slaaptijd: <strong>${recSleep}</strong></div></div>`;
+  }
+}
+
+/* ─── PLANNER TAB ─── */
+function onStudyHours(v) {
+  S.studyHours = parseFloat(v);
+  save();
+  document.getElementById('study-hrs-val').textContent = `${v} u`;
+  renderAll();
+}
+
+function onStudyStart(v) {
+  if (!v) return;
+  const [h, m] = v.split(':').map(Number);
+  S.studyStart = h * 60 + m;
+  save();
+  renderAll();
+}
+
+function setEffTarget(n) {
+  S.effTarget = n;
+  save();
+  document.querySelectorAll('.eff-btn').forEach((b, i) => {
+    b.classList.toggle('active', i + 1 === n);
+  });
+  renderPlannerContent();
+  renderAll();
+}
+
+let plannerChart = null;
+
+function initPlannerChart() {
+  const pts    = cachedPts || buildPts();
+  const labels = pts.map(t => fmtMin(t));
+  const zeros  = new Array(pts.length).fill(0);
+  const ctx    = document.getElementById('plannerChart').getContext('2d');
+  plannerChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label:'Efficiëntiedoel',    data:[...zeros], borderColor:'rgba(251,191,36,.6)', backgroundColor:'rgba(251,191,36,.08)', borderWidth:1.5, borderDash:[4,3], fill:true, tension:.45, pointRadius:0, order:10 },
+        { label:'MPH-IR',            data:[...zeros], borderColor:'#a855f7', backgroundColor:'rgba(168,85,247,.08)', borderWidth:1.5, fill:true, tension:.4, pointRadius:0, order:2 },
+        { label:'Cafeïne',           data:[...zeros], borderColor:'#f97316', backgroundColor:'rgba(249,115,22,.08)', borderWidth:1.5, fill:true, tension:.4, pointRadius:0, order:2 },
+        { label:'L-Theanine',        data:[...zeros], borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.08)',  borderWidth:1.5, fill:true, tension:.4, pointRadius:0, order:2 },
+        { label:'Elevanse',          data:[...zeros], borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,.08)', borderWidth:1.5, fill:true, tension:.4, pointRadius:0, order:2 },
+        { label:'Focus Efficiëntie', data:[...zeros], borderColor:'#94a3b8', backgroundColor:'transparent', borderWidth:2.2, fill:false, tension:.4, pointRadius:0, order:0 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 220 },
+      plugins: {
+        legend: { position:'top', labels:{ color:'#6668a0', font:{size:9}, boxWidth:8, padding:8, usePointStyle:true } },
+        tooltip: {
+          backgroundColor:'#161620', borderColor:'#252535', borderWidth:1,
+          titleColor:'#dde0f0', bodyColor:'#6668a0',
+          mode:'index', intersect:false,
+          callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y.toFixed(1)}` },
+        },
+      },
+      scales: {
+        x: {
+          grid: { color:'rgba(37,37,53,.9)' },
+          ticks: { color:'#6668a0', font:{size:8}, maxTicksLimit:8, callback(v) { const l = this.getLabelForValue(v); return l && l.endsWith(':00') ? l : ''; } },
+          border: { display:false },
+        },
+        y: {
+          min: 0, suggestedMax: 85,
+          grid: { color:'rgba(37,37,53,.9)' },
+          ticks: { color:'#6668a0', font:{size:8}, maxTicksLimit:4 },
+          border: { display:false },
+        },
+      },
+      interaction: { mode:'index', intersect:false },
+    },
+    plugins: [pluginBreakZones],
+  });
+}
+
+function refreshPlannerChart() {
+  if (!plannerChart) return;
+  const pts  = cachedPts || buildPts();
+  const lvl  = EFF_LEVELS[S.effTarget];
+
+  const simDoses = lvl.substances.map(s => ({
+    substance: s.subKey,
+    amount:    s.amount,
+    time:      S.studyStart + s.offsetMin,
+  }));
+
+  const mphC  = pts.map(t => simDoses.filter(d => d.substance === 'mph')
+                  .reduce((a, d) => a + concAt(d, t), 0));
+  const caffC = pts.map(t => simDoses.filter(d => d.substance === 'caffeine')
+                  .reduce((a, d) => a + concAt(d, t), 0));
+  const theaC = pts.map(t => simDoses.filter(d => d.substance === 'theanine')
+                  .reduce((a, d) => a + concAt(d, t), 0));
+  const elevC = subCurve('elevanse', pts);
+  const effC  = focusEfficiency(pts, mphC, caffC, theaC, elevC);
+  const recC  = recommendCurve(pts);
+
+  plannerChart.data.datasets[0].data = recC;
+  plannerChart.data.datasets[1].data = mphC;
+  plannerChart.data.datasets[2].data = caffC;
+  plannerChart.data.datasets[3].data = theaC;
+  plannerChart.data.datasets[4].data = elevC;
+  plannerChart.data.datasets[5].data = effC;
+  plannerChart.update();
+}
+
+function renderPlannerContent() {
+  const lvl    = EFF_LEVELS[S.effTarget];
+  const isWarn = S.effTarget >= 4;
+
+  document.getElementById('eff-desc').innerHTML = `
+    <div class="eff-desc-title" style="color:${lvl.color}">Level ${S.effTarget} — ${lvl.label}</div>
+    ${lvl.desc}
+    ${isWarn ? `<div style="margin-top:8px;font-size:.75rem;color:${S.effTarget >= 5 ? 'var(--red)' : 'var(--orange)'}">
+      ⚠ Je hebt level ${S.effTarget} gevraagd. Ik adviseer dit eerlijk — inclusief wat niet slim is. Jij beslist.
+    </div>` : ''}
+  `;
+
+  const subsHtml = lvl.substances.map(s => `
+    <div class="opt-rec" style="border-left-color:${s.color}">
+      <div class="opt-dot" style="background:${s.color}"></div>
+      <div class="opt-body">
+        <div class="opt-dose">${s.name} &nbsp;<span style="font-size:.67rem;font-weight:400;color:var(--muted)">${s.timing}</span></div>
+        <div class="opt-why">${s.why}</div>
+        ${s.warn ? `<div class="opt-warn">⚠ Niet optimaal — maar je vroeg erom, dus hier staat het.</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('honest-recs').innerHTML = `
+    <div class="section-label" style="margin-top:14px">Stack voor dit doel</div>
+    ${subsHtml}
+  `;
+
+  refreshPlannerChart();
+  renderBreakList();
+}
+
+/* ─── BREAK / MEAL MANAGEMENT ─── */
+function showBreakForm(type) {
+  breakFormType = type;
+  document.getElementById('break-form-label').textContent =
+    type === 'meal' ? 'Maaltijd toevoegen' : 'Pauze toevoegen';
+  document.getElementById('break-dur-input').value = type === 'meal' ? 30 : 15;
+  const d = new Date();
+  document.getElementById('break-time-input').value =
+    `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  document.getElementById('break-form').style.display = 'block';
+}
+
+function hideBreakForm() {
+  document.getElementById('break-form').style.display = 'none';
+}
+
+function setBreakTimeNow() {
+  const d = new Date();
+  document.getElementById('break-time-input').value =
+    `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function confirmBreak() {
+  const tv  = document.getElementById('break-time-input').value;
+  const dur = parseInt(document.getElementById('break-dur-input').value, 10);
+  if (!tv || isNaN(dur) || dur < 1) return;
+  const [h, m] = tv.split(':').map(Number);
+  const startMin = h * 60 + m;
+  S.breaks.push({
+    id: Date.now(),
+    startMin,
+    durationMin: dur,
+    type: breakFormType,
+    date: new Date().toDateString(),
+  });
+  save();
+  hideBreakForm();
+  renderAll();
+  toast(`${breakFormType === 'meal' ? 'Maaltijd' : 'Pauze'} (${dur} min) toegevoegd`);
+}
+
+function removeBreak(id) {
+  S.breaks = S.breaks.filter(b => b.id !== id);
+  save(); renderAll();
+}
+
+function renderBreakList() {
+  const el = document.getElementById('break-list');
+  if (!S.breaks.length) {
+    el.innerHTML = '<div class="dose-empty">Geen pauzes gepland</div>'; return;
+  }
+  const sorted = [...S.breaks].sort((a,b) => a.startMin - b.startMin);
+  el.innerHTML = sorted.map(b => `
+    <div class="break-item">
+      <div class="break-item-ico">${b.type === 'meal' ? '🍽' : '⏸'}</div>
+      <div class="break-item-time">${fmtMin(b.startMin)} – ${fmtMin(b.startMin + b.durationMin)}</div>
+      <div class="break-item-type">${b.type === 'meal' ? 'Maaltijd' : 'Pauze'} · ${b.durationMin} min</div>
+      <button class="break-item-rm" onclick="removeBreak(${b.id})">×</button>
+    </div>
+  `).join('');
+}
+
+/* ─── RENDER ALL ─── */
+function renderAll() {
+  refreshChart();
+  renderDoseLog();
+  renderOptRecs();
+  renderSleepTab();
+  renderAdviceTab();
+  renderPlannerContent();
+}
+
+/* ─── TAB SWITCHING ─── */
+function switchTab(name) {
+  const names = ['stack','sleep','advice','planner'];
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.tab-content').forEach(el => {
+    el.classList.toggle('active', el.id === 'tab-' + name);
+  });
+  if (name === 'stack') refreshChart();
+}
+
+/* ─── TOAST ─── */
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+/* ─── INIT ─── */
+function init() {
+  loadState();
+  setTimeToNow();
+
+  const sleepH = S.sleepTime / 60;
+  document.getElementById('sleep-slider').value = sleepH;
+  const dh = sleepH >= 24 ? sleepH - 24 : sleepH;
+  const hh = Math.floor(dh), mm = Math.round((dh - hh) * 60);
+  document.getElementById('sleep-time-val').textContent =
+    `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+  document.getElementById('hrs-slider').value = S.sleepHrs;
+  document.getElementById('sleep-hrs-val').textContent = `${S.sleepHrs} u`;
+
+  document.getElementById('study-hrs-slider').value = S.studyHours;
+  document.getElementById('study-hrs-val').textContent = `${S.studyHours} u`;
+  document.getElementById('study-start-input').value = minToTimeVal(S.studyStart);
+
+  document.querySelectorAll('.eff-btn').forEach((b, i) => {
+    b.classList.toggle('active', i + 1 === S.effTarget);
+  });
+
+  initChart();
+  initPlannerChart();
+  renderAll();
+  setInterval(renderAll, 60_000);
+}
+
+init();
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  if (typeof initCloudSync !== 'function') return;
+  initCloudSync({
+    appKey: 'focus',
+    syncedKeys: ['fst_v3'],
+    onApplied: function () {
+      if (typeof loadState === 'function') loadState();
+      if (typeof renderAll === 'function') renderAll();
+    }
+  });
+});
+</script>
+</body>
+</html>
