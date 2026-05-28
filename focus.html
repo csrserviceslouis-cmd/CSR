@@ -26,6 +26,8 @@
       --theanine-dim: rgba(34,197,94,0.12);
       --elevanse: #3b82f6;
       --elevanse-dim: rgba(59,130,246,0.12);
+      --sandoz: #c084fc;
+      --sandoz-dim: rgba(192,132,252,0.12);
       --total: #94a3b8;
       --red: #ef4444;
       --yellow: #eab308;
@@ -86,6 +88,7 @@
     .substance-card.caffeine { border-top: 2px solid var(--caffeine); }
     .substance-card.theanine { border-top: 2px solid var(--theanine); }
     .substance-card.elevanse { border-top: 2px solid var(--elevanse); }
+    .substance-card.sandoz  { border-top: 2px solid var(--sandoz); }
     .sub-label {
       font-size: .7rem; font-weight: 700; text-transform: uppercase;
       letter-spacing: .1em; margin-bottom: 8px;
@@ -94,6 +97,7 @@
     .substance-card.caffeine .sub-label { color: var(--caffeine); }
     .substance-card.theanine .sub-label { color: var(--theanine); }
     .substance-card.elevanse .sub-label { color: var(--elevanse); }
+    .substance-card.sandoz  .sub-label { color: var(--sandoz); }
 
     .dose-btns { display: flex; flex-wrap: wrap; gap: 5px; }
     .dose-btn {
@@ -107,6 +111,7 @@
     .caffeine .dose-btn:hover { background: var(--caffeine-dim); border-color: var(--caffeine); color: var(--caffeine); }
     .theanine .dose-btn:hover { background: var(--theanine-dim); border-color: var(--theanine); color: var(--theanine); }
     .elevanse .dose-btn:hover { background: var(--elevanse-dim); border-color: var(--elevanse); color: var(--elevanse); }
+    .sandoz   .dose-btn:hover { background: var(--sandoz-dim);   border-color: var(--sandoz);   color: var(--sandoz); }
 
     /* FOCUS METER */
     .focus-meter {
@@ -425,6 +430,14 @@
   </div>
 
   <div class="substance-cards" style="margin-top:4px">
+    <div class="substance-card sandoz">
+      <div class="sub-label">Sandoz XR</div>
+      <div class="dose-btns">
+        <button class="dose-btn" onclick="logDose('sandoz',18)">18 mg</button>
+        <button class="dose-btn" onclick="logDose('sandoz',36)">36 mg</button>
+        <button class="dose-btn" onclick="logDose('sandoz',54)">54 mg</button>
+      </div>
+    </div>
     <div class="substance-card mph">
       <div class="sub-label">MPH-IR</div>
       <div class="dose-btns">
@@ -436,9 +449,8 @@
     <div class="substance-card caffeine">
       <div class="sub-label">Cafeïne</div>
       <div class="dose-btns">
-        <button class="dose-btn" onclick="logDose('caffeine',50)">50 mg</button>
+        <button class="dose-btn" onclick="logDose('caffeine',75)">75 mg</button>
         <button class="dose-btn" onclick="logDose('caffeine',100)">100 mg</button>
-        <button class="dose-btn" onclick="logDose('caffeine',150)">150 mg</button>
       </div>
     </div>
     <div class="substance-card theanine">
@@ -654,6 +666,14 @@ const SUB = {
     peak:  55,
     color: '#3b82f6',
   },
+  sandoz: {
+    name: 'Sandoz XR',
+    tmax:  420,
+    hl:    210,
+    ref:    18,
+    peak:   38,
+    color: '#c084fc',
+  },
 };
 
 const D_START = 6  * 60;
@@ -837,10 +857,11 @@ function lastSafeIntake(subKey) {
 }
 
 /* ─── FOCUS EFFICIENCY MODEL ─── */
-function focusEfficiency(pts, mphC, caffC, theaC, elevC) {
-  const ev = elevC || [];
+function focusEfficiency(pts, mphC, caffC, theaC, elevC, sandozC) {
+  const ev = elevC  || [];
+  const sz = sandozC || [];
   return pts.map((_, i) => {
-    const mph  = mphC[i] + (ev[i] || 0);
+    const mph  = mphC[i] + (ev[i] || 0) + (sz[i] || 0);
     const caff = caffC[i];
     const thea = theaC[i];
     if (mph + caff + thea < 0.3) return 0;
@@ -956,9 +977,10 @@ const pluginSleepZone = {
     const { ctx, scales: { x, y }, data } = ch;
     const px = x.getPixelForValue(i);
     const mD = data.datasets[1].data;
-    const cD = data.datasets[2].data;
-    const eD = data.datasets[4].data;
-    const stimAt = j => (mD[j] || 0) + (cD[j] || 0) + (eD[j] || 0);
+    const sD = data.datasets[2].data;
+    const cD = data.datasets[3].data;
+    const eD = data.datasets[5].data;
+    const stimAt = j => (mD[j] || 0) + (sD[j] || 0) + (cD[j] || 0) + (eD[j] || 0);
     const pk = Math.max(...mD.map((_, j) => stimAt(j)));
     if (pk > 0 && stimAt(i) / pk > 0.15) {
       ctx.save();
@@ -1018,6 +1040,7 @@ function initChart() {
       datasets: [
         { label:'Streefzone',         data:[...zeros], borderColor:'rgba(251,191,36,.45)', backgroundColor:'rgba(251,191,36,.08)', borderWidth:1.2, borderDash:[4,3], fill:true, tension:.5, pointRadius:0, order:10 },
         { label:'MPH-IR',             data:[...zeros], borderColor:'#a855f7', backgroundColor:'rgba(168,85,247,.07)',  borderWidth:1.5, fill:true, tension:.4, pointRadius:0, order:1 },
+        { label:'Sandoz XR',          data:[...zeros], borderColor:'#c084fc', backgroundColor:'rgba(192,132,252,.07)', borderWidth:1.5, fill:true, tension:.4, pointRadius:0, order:1 },
         { label:'Cafeïne',            data:[...zeros], borderColor:'#f97316', backgroundColor:'rgba(249,115,22,.07)',  borderWidth:1.5, fill:true, tension:.4, pointRadius:0, order:1 },
         { label:'L-Theanine',         data:[...zeros], borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.07)',   borderWidth:1.5, fill:true, tension:.4, pointRadius:0, order:1 },
         { label:'Elevanse',           data:[...zeros], borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,.07)',  borderWidth:1.5, fill:true, tension:.4, pointRadius:0, order:1 },
@@ -1067,21 +1090,23 @@ function initChart() {
 function refreshChart() {
   if (!chart) return;
   const pts   = cachedPts || buildPts();
-  const mphC  = subCurve('mph',      pts);
-  const caffC = subCurve('caffeine', pts);
-  const theaC = subCurve('theanine', pts);
-  const elevC = subCurve('elevanse', pts);
-  const effC  = focusEfficiency(pts, mphC, caffC, theaC, elevC);
-  const recC  = recommendCurve(pts);
-  const thr   = threshold();
+  const mphC    = subCurve('mph',      pts);
+  const sandozC = subCurve('sandoz',   pts);
+  const caffC   = subCurve('caffeine', pts);
+  const theaC   = subCurve('theanine', pts);
+  const elevC   = subCurve('elevanse', pts);
+  const effC    = focusEfficiency(pts, mphC, caffC, theaC, elevC, sandozC);
+  const recC    = recommendCurve(pts);
+  const thr     = threshold();
 
   chart.data.datasets[0].data = recC;
   chart.data.datasets[1].data = mphC;
-  chart.data.datasets[2].data = caffC;
-  chart.data.datasets[3].data = theaC;
-  chart.data.datasets[4].data = elevC;
-  chart.data.datasets[5].data = effC;
-  chart.data.datasets[6].data = pts.map(() => thr);
+  chart.data.datasets[2].data = sandozC;
+  chart.data.datasets[3].data = caffC;
+  chart.data.datasets[4].data = theaC;
+  chart.data.datasets[5].data = elevC;
+  chart.data.datasets[6].data = effC;
+  chart.data.datasets[7].data = pts.map(() => thr);
   chart.update();
 
   const now  = nowMin();
@@ -1175,12 +1200,13 @@ function generateOptimalRecommendations() {
   const nowI  = pts.findIndex(t => t >= now);
   if (nowI < 0) return [];
 
-  const mphC  = subCurve('mph',      pts);
-  const caffC = subCurve('caffeine', pts);
-  const theaC = subCurve('theanine', pts);
-  const elevC = subCurve('elevanse', pts);
-  const effC  = focusEfficiency(pts, mphC, caffC, theaC, elevC);
-  const recC  = recommendCurve(pts);
+  const mphC    = subCurve('mph',      pts);
+  const sandozC = subCurve('sandoz',   pts);
+  const caffC   = subCurve('caffeine', pts);
+  const theaC   = subCurve('theanine', pts);
+  const elevC   = subCurve('elevanse', pts);
+  const effC    = focusEfficiency(pts, mphC, caffC, theaC, elevC, sandozC);
+  const recC    = recommendCurve(pts);
 
   const sleepMin  = Math.min(S.sleepTime, D_END);
   const sleepI    = pts.findIndex(t => t >= sleepMin);
@@ -1219,7 +1245,7 @@ function generateOptimalRecommendations() {
     const m  = mphC[i]  + (sub === 'mph'      ? concAt(fd, pts[i]) : 0);
     const ca = caffC[i] + (sub === 'caffeine' ? concAt(fd, pts[i]) : 0);
     const th = theaC[i] + (sub === 'theanine' ? concAt(fd, pts[i]) : 0);
-    return focusEfficiency([pts[i]], [m], [ca], [th])[0] - effC[i];
+    return focusEfficiency([pts[i]], [m], [ca], [th], [elevC[i]], [sandozC[i]])[0] - effC[i];
   }
 
   const caffNow = caffC[nowI];
@@ -1373,14 +1399,17 @@ function renderSleepTab() {
   const lsc  = lastSafeIntake('caffeine');
   const lsm  = lastSafeIntake('mph');
   const lse  = lastSafeIntake('elevanse');
-  const hase = S.doses.some(d => d.substance === 'elevanse');
-  const hasc = S.doses.some(d => d.substance === 'caffeine');
-  const hasm = S.doses.some(d => d.substance === 'mph');
-  const hast = S.doses.some(d => d.substance === 'theanine');
+  const lssz = lastSafeIntake('sandoz');
+  const hase  = S.doses.some(d => d.substance === 'elevanse');
+  const hasc  = S.doses.some(d => d.substance === 'caffeine');
+  const hasm  = S.doses.some(d => d.substance === 'mph');
+  const hast  = S.doses.some(d => d.substance === 'theanine');
+  const hassz = S.doses.some(d => d.substance === 'sandoz');
 
   const recs = [];
   recs.push({ ico:'⏰', txt:`Laatste cafeïne uiterlijk om <strong>${fmtMin(lsc)}</strong> voor slaap om ${fmtMin(S.sleepTime)}` });
   recs.push({ ico:'⏰', txt:`Laatste MPH-IR uiterlijk om <strong>${fmtMin(lsm)}</strong>` });
+  if (hassz) recs.push({ ico:'⏰', txt:`Sandoz XR uiterlijk innemen om <strong>${fmtMin(lssz)}</strong> — langzame afgifte (~7u piek)` });
   if (hase) recs.push({ ico:'⏰', txt:`Elevanse (lisdexamfetamine) uiterlijk om <strong>${fmtMin(lse)}</strong> — lange halfwaardetijd (~11u)` });
   if (S.sleepHrs < 5.5)
     recs.push({ ico:'😴', txt:'Slechte nachtrust: verlaag MPH met 25–50% — verhoogde prikkelgevoeligheid en reboundkans' });
@@ -1398,16 +1427,17 @@ function renderSleepTab() {
 
 /* ─── ADVICE TAB ─── */
 function renderAdviceTab() {
-  const pts   = cachedPts || buildPts();
-  const mphC  = subCurve('mph',      pts);
-  const caffC = subCurve('caffeine', pts);
-  const theaC = subCurve('theanine', pts);
-  const elevC = subCurve('elevanse', pts);
-  const stimC = pts.map((_, j) => mphC[j] + caffC[j] + elevC[j]);
-  const pkStim = Math.max(...stimC);
-  const pkMph  = Math.max(...mphC, ...elevC);
-  const pkCaf  = Math.max(...caffC);
-  const effC   = focusEfficiency(pts, mphC, caffC, theaC, elevC);
+  const pts     = cachedPts || buildPts();
+  const mphC    = subCurve('mph',      pts);
+  const sandozC = subCurve('sandoz',   pts);
+  const caffC   = subCurve('caffeine', pts);
+  const theaC   = subCurve('theanine', pts);
+  const elevC   = subCurve('elevanse', pts);
+  const stimC   = pts.map((_, j) => mphC[j] + sandozC[j] + caffC[j] + elevC[j]);
+  const pkStim  = Math.max(...stimC);
+  const pkMph   = Math.max(...mphC, ...sandozC, ...elevC);
+  const pkCaf   = Math.max(...caffC);
+  const effC    = focusEfficiency(pts, mphC, caffC, theaC, elevC, sandozC);
   const pkEff  = Math.max(...effC);
 
   const warns = [];
